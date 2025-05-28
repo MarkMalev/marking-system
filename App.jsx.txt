@@ -1,10 +1,274 @@
 import React from 'react';
 
 export default function App() {
+  const [products, setProducts] = React.useState([]);
+  const [scannedId, setScannedId] = React.useState('');
+  const [currentProduct, setCurrentProduct] = React.useState(null);
+  const [showCard, setShowCard] = React.useState(false);
+  const [showAdmin, setShowAdmin] = React.useState(false);
+  const [isEditingId, setIsEditingId] = React.useState(false);
+
+  // Сохраняем данные между сессиями
+  React.useEffect(() => {
+    const saved = localStorage.getItem('marking-system-products');
+    if (saved) {
+      setProducts(JSON.parse(saved));
+    }
+  }, []);
+
+  React.useEffect(() => {
+    localStorage.setItem('marking-system-products', JSON.stringify(products));
+  }, [products]);
+
+  // Подсчёт дней до истечения срока
+  const daysLeft = (dateString) => {
+    const today = new Date();
+    const expiration = new Date(dateString);
+    const diffTime = expiration - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? `${diffDays} дней` : `просрочено на ${Math.abs(diffDays)} дней`;
+  };
+
+  // Обработка сканирования
+  const handleScan = (e) => {
+    if (e.key === 'Enter') {
+      const product = products.find(p => p.id === scannedId);
+      if (product) {
+        setCurrentProduct(product);
+        setShowCard(true);
+        setTimeout(() => setShowCard(false), 10000);
+        setScannedId('');
+      }
+    } else if (e.key === '=') {
+      setScannedId('');
+    } else if (e.key === '+') {
+      setScannedId(prev => prev.slice(0, -1));
+    } else if (!e.ctrlKey && !e.metaKey && /^[0-9]$/.test(e.key)) {
+      setScannedId(prev => prev + e.key);
+    } else if (e.key === '-' && !isEditingId) {
+      if (scannedId) {
+        setScannedId(prev => prev + '-');
+      } else {
+        setShowAdmin(!showAdmin);
+      }
+      e.preventDefault();
+    }
+  };
+
+  // Обновление поля товара
+  const handleChangeField = (productId, field, value) => {
+    setProducts(prev =>
+      prev.map(p => (p.id === productId ? { ...p, [field]: value } : p))
+    );
+  };
+
+  // Копирование товара
+  const handleCopyProduct = (product) => {
+    const newProduct = { ...product, id: '' };
+    setProducts(prev => [...prev, newProduct]);
+  };
+
+  // Добавление нового товара
+  const handleAddProduct = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const newProduct = {
+      id: form.id.value.trim(),
+      name: form.name.value.trim(),
+      price: form.price.value.trim(),
+      expirationDate: form.expirationDate.value,
+      status: 'available',
+    };
+
+    if (!newProduct.id) {
+      alert('ID не может быть пустым!');
+      return;
+    }
+
+    if (products.some(p => p.id === newProduct.id)) {
+      alert('Товар с таким ID уже существует!');
+      return;
+    }
+
+    setProducts(prev => [...prev, newProduct]);
+    form.reset();
+  };
+
+  React.useEffect(() => {
+    window.addEventListener('keydown', handleScan);
+    return () => {
+      window.removeEventListener('keydown', handleScan);
+    };
+  }, [scannedId, showCard, showAdmin, isEditingId]);
+
   return (
-    <div style={{ fontFamily: 'Arial', textAlign: 'center', padding: '40px' }}>
-      <h1>Система маркировки</h1>
-      <p>Работает!</p>
+    <div className="min-h-screen bg-white text-blue-600 font-sans">
+      {/* Подключаем шрифт */}
+      <style jsx>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap  ');
+        body {
+          font-family: 'Fredoka One', cursive;
+        }
+      `}</style>
+      <div className="container mx-auto px-4 py-8 max-w-xl">
+        <header className="text-center mb-8">
+          <h1 className="text-5xl font-bold">Система Маркировки</h1>
+        </header>
+
+        <main className="mx-auto">
+          {!showAdmin ? (
+            <>
+              {!showCard ? (
+                <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center">
+                  <p className="text-lg mb-4">Отсканируйте штрихкод:</p>
+                  <div className="bg-gray-50 border border-blue-200 rounded-md p-4 min-h-[60px] flex items-center justify-center mb-4">
+                    <span className="font-mono text-xl">{scannedId || '...'}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="transition-all duration-300 border rounded-lg p-6 shadow-lg bg-blue-50 border-blue-200">
+                  <h2 className="text-2xl font-bold mb-2">{currentProduct.name}</h2>
+                  <p className="text-lg mb-1">Цена: <span className="font-semibold">{currentProduct.price}</span></p>
+                  <p className="text-lg mb-1">
+                    Срок годности: <span className="font-semibold">{daysLeft(currentProduct.expirationDate)}</span>
+                  </p>
+                  <p className="text-lg mb-4">
+                    Статус: <span className="font-semibold">{currentProduct.status === 'sold' ? 'Продано' : 'В наличии'}</span>
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="border border-gray-300 rounded-lg overflow-hidden shadow-lg">
+              <div className="flex justify-between items-center bg-blue-100 px-4 py-2">
+                <h2 className="text-xl font-bold">Админка — Управление товарами</h2>
+                <button onClick={() => setShowAdmin(false)} className="text-red-500 hover:text-red-700 font-bold">
+                  × Закрыть
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full table-auto">
+                  <thead>
+                    <tr className="bg-blue-50">
+                      <th className="px-4 py-2 min-w-[120px]">ID</th>
+                      <th className="px-4 py-2 min-w-[160px]">Название</th>
+                      <th className="px-4 py-2 min-w-[100px]">Цена</th>
+                      <th className="px-4 py-2 min-w-[140px]">Срок годности</th>
+                      <th className="px-4 py-2 min-w-[100px]">Статус</th>
+                      <th className="px-4 py-2 min-w-[60px]">Копировать</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="text-center py-6 text-gray-500">
+                          Нет товаров. Добавьте первый товар через форму ниже.
+                        </td>
+                      </tr>
+                    ) : (
+                      products.map((p) => (
+                        <tr key={p.id} className="border-t hover:bg-gray-50">
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              value={p.id}
+                              onChange={(e) => handleChangeField(p.id, 'id', e.target.value)}
+                              onFocus={() => setIsEditingId(true)}
+                              onBlur={() => setIsEditingId(false)}
+                              className="w-full border rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              value={p.name}
+                              onChange={(e) => handleChangeField(p.id, 'name', e.target.value)}
+                              className="w-full border rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="text"
+                              value={p.price}
+                              onChange={(e) => handleChangeField(p.id, 'price', e.target.value)}
+                              className="w-full border rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input
+                              type="date"
+                              value={p.expirationDate}
+                              onChange={(e) => handleChangeField(p.id, 'expirationDate', e.target.value)}
+                              className="w-full border rounded px-2 py-1"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <select
+                              value={p.status}
+                              onChange={(e) => handleChangeField(p.id, 'status', e.target.value)}
+                              className="w-full border rounded px-2 py-1"
+                            >
+                              <option value="available">В наличии</option>
+                              <option value="sold">Продано</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => handleCopyProduct(p)}
+                              className="text-blue-500 hover:text-blue-700 block w-full text-center"
+                            >
+                              +
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <form onSubmit={handleAddProduct} className="p-4 border-t bg-gray-50 grid grid-cols-5 gap-2">
+                <input
+                  type="text"
+                  name="id"
+                  placeholder="ID"
+                  required
+                  className="col-span-1 border rounded px-2 py-1"
+                />
+                <input
+                  type="text"
+                  name="name"
+                  placeholder="Название"
+                  required
+                  className="col-span-1 border rounded px-2 py-1"
+                />
+                <input
+                  type="text"
+                  name="price"
+                  placeholder="Цена"
+                  required
+                  className="col-span-1 border rounded px-2 py-1"
+                />
+                <input
+                  type="date"
+                  name="expirationDate"
+                  required
+                  className="col-span-1 border rounded px-2 py-1"
+                />
+                <button
+                  type="submit"
+                  className="col-span-1 mt-2 bg-blue-600 hover:bg-blue-700 text-white py-1 rounded transition"
+                >
+                  ➕
+                </button>
+              </form>
+            </div>
+          )}
+        </main>
+
+        <footer className="mt-12 text-center text-gray-500 text-sm">
+          <p>© {new Date().getFullYear()} Система маркировки. Все права защищены.</p>
+        </footer>
+      </div>
     </div>
   );
 }
